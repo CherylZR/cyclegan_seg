@@ -1,0 +1,173 @@
+ GAN数据增强
+本文档总结了对抗生成网络（GAN）的部分相关文献，记录了复现Facebook 2017人脸论文FaderNet原文效果的实验过程。
+ 
+
+目录
+1 论文总结	1
+1.1 GAN与检测	1
+1.2 GAN与分割	7
+1.3 GAN与人脸属性编辑	8
+1.4 GAN与真实感增强	11
+2 FaderNet实验	14
+2.1 实验结果	14
+2.2 实验经验	15
+ 
+1 论文总结
+	本部分总结了对抗生成网络（GAN）在4个领域的相关论文，共计7篇。
+1.1 GAN与检测
+Perceptual Generative Adversarial Networks for Small Object Detection
+	论文信息：Jianan Li et al. In CVPR,2017 
+ 
+	文章要解决的问题是低分辨率物体的检测，在自动驾驶领域有重要意义。现有方法大多是在多尺度上学习表达，计算花费大。本文的解决思路是设计一种网络结构（Perceptual GAN），使小物体与大物体的特征图尽可能相似，如上图所示。
+ 
+	Perceptual GAN具体结构如上图所示，分为两部分——生成器网络和判别器网络。
+	生成器网络的输入是低分辨率物体（小对象）和正常分辨率物体（大对象）的图像。目的是让小对象的特征表达尽可能趋近大对象的特征表达。解决思路是在网络中增加残差支路。具体做法是当输入大对象的图像时，只经过上图左上的网络部分（5层conv）；当输入小对象的图像时，同时经过左上的网络部分（5层conv）和左下的网络部分（残差结构），并在输出部分做元素求和操作。需要说明几点，原文实验证明以conv1的输出作为残差模块的输入结果最好，残差模块中的1*1conv作用是增加特征维度。
+	判别器网络的输入是大对象和小对象的特征图，由两部分组成——对抗模块和感知模块。对抗模块是一个判别器结构，类似GAN中的判别器，作用是引导生成器网络，使生成的两种对象的特征图相近。感知模块与Fast RCNN的类别分类和位置回归的结构相同，这种做法是RCNN类检测算法的共通之处。
+	说明一点，训练分两个阶段。第一阶段，用大对象训练生成器的5层conv部分和判别器的感知模块，第二阶段，用小对象训练整个网络结构。
+实验部分
+	第一部分，在两个数据集上（Traffic-sign Detection Datasets， Pedestrian Detection Datasets），与其他方法做了对比。各类方法的召回率和准确率如图所示。
+ 
+	下图是对比结果的示例。
+ 
+	下表是各种方法在各个分类下的表现。
+ 
+	第二部分探究了内部子结构的有效性，在PASCAL VOC 2007 and VOC 2012上进行验证。
+	下图比较了Perceptual GAN几种变体的检测表现。
+ 
+	下图是可视化小对象和大对象的特征图，最后两列是生成器网络输出两种对象的特征图，可以看出非常相似，这对检测有重要意义。
+ 
+	下表是进行对比实验，用以得到上文提到的以conv1的输出做残差模块的输入效果最好。
+ 
+
+A-Fast-RCNN: Hard Positive Generation 
+via Adversary for Object Detection
+	论文信息：The Robotics Institute, Carnegie Mellon University.In CVPR,2017
+				  Code : https://github.com/xiaolonw/adversarial-frcnn 
+ 
+	本文要解决的问题是检测器对遮挡和形变的鲁棒性。现有提高鲁棒性的方法主要是数据驱动策略，获取更大规模的数据，检测器从这些实例上学习不变性。但对象的遮挡和形变有长尾效应，大型数据集也很难收集到，如上图前两行所示。解决思路是：设计一种对抗网络（A-Fast-RCNN）来生成遮挡和形变的困难实例，从而提高检测器的鲁棒性。
+	A-Fast-RCNN 生成特征图级别的困难实例，而不是像素级别的。与GAN的思想相似，生成器生成困难样本，检测器适应困难样本。根据遮挡和形变的特性，分为两个子网络，Adversarial Spatial Dropout Network (ASDN)和Adversarial Spatial Transformer Network(ASTN)。
+
+ 
+	ASDN结构如图所示，在Fast RCNN的结构中增添遮挡模块，位置是RoI Pooling Layer的输出和分类回归模块的输入之间。具体做法是将RoI Pooling Layer输出的特征图分为9块（3*3），依次添加掩膜，得到添加掩膜的特征图。
+	关于寻找最合适的掩膜位置，做法是找到对类别分类结果影响最大的掩膜位置，由此说明遮挡了该类别物体的关键特征信息，也就间接生成的遮挡严重的困难样本。
+	训练过程也分为两个阶段，首先用正常样本预训练，然后正常和困难样本联合训练。
+ 
+	ASTN借鉴了（Spatial Transformer Network），STN 主要分为三个部分localisation network 、grid generator和 sampler。localisation network用来估计形变量：旋转度、平移距离和缩放因子，grid generator则是得到input map 到output map 各位置的对应关系 Tθ， sampler根据input map和对应关系 Tθ，生成最终的output map，效果图如下图所示。
+ 
+	ASTN目的与STN相反，说明ASTN的一些细节，旋转角度从-10度到10度，channel分4块，每一块旋转方向不同。
+实验部分
+	下表对比了各方法在PASCAL VOC 2007, PASCAL VOC 2012 and MS COCO的表现。
+ 
+	下图展示了ASTN和ASDN联合使用时，会提升一些类别的检测表现。有些类别的表现一直是降低的，说明一些问题，过度遮挡和扭曲会导致过度泛化。
+ 
+1.2 GAN与分割
+SegAN: Adversarial Network with Multi-scale L1 Loss 
+for Medical Image Segmentation
+	论文信息：Lehigh University, Rutgers University；arXiv : 6 Jun 2017 
+ 
+	这篇文章是用GAN的思想来做大脑肿瘤的医学图像语义分割，网络结构如图所示，上半部分是分割器，也是特征提取器，输入是大脑图像，输出是预测的肿瘤语义图。下半部分是判别器，用预测肿瘤语义图和标准肿瘤语义图依次与原图做元素相加得到掩码图，判别器判断掩码图的真假，并设计多尺度的loss函数。
+
+Retinal Vessel Segmentation in Fundoscopic Images 
+with Generative Adversarial Networks
+	论文信息：Vuno Inc., Seoul, Korea；arXiv : 28 Jun 2017
+				   Code : https://bitbucket.org/woalsdnd/v-gan 
+ 
+	本文用于解决眼底图像的视网膜血管分割问题，方法与上文类似，使用UNet结构生成预测语义分割图，并将标准语义图和预测语义图输入到判别器，判断语义图是人工标注还是机器生成的。
+
+1.3 GAN与人脸属性编辑
+Invertible Conditional GANs for image editing
+	论文信息：Computer Vision Center, Barcelona, Spain
+				   https://github.com/Guim3/IcGAN （troch）
+				   Workshop on Adversarial Training, NIPS 2016
+	人脸属性编辑所要达到的效果如下图所示，输入任意一张人脸图像，可以得到重建图像，重建图像中的人物没有改变，但属性发生了变化。属性可能包含性别（男/女），发色（黑/黄/…），眼镜（带/不带），嘴巴（张开/闭合）等。
+ 
+ 
+	IcGAN的结构如上图所示，包含encoder和cGAN两部分。encoder是卷积网络结构，输入是人物图像x，输出有2个，图像特征z和图像属性的预测值y。cGAN与GAN的生成器结构相同，输入是图像特征z和改变的属性y’，输出是重建的人物图像x’。
+	Loss函数有2部分，公式如下
+ 
+	Lez是求原图x的特征z 和重建图x’的特征z’的差平方，减小Lez的值，也就减小了原图与重建图的特征差别，最终达到原图与重建图的特征几乎相同的目标，间接实现了特征与属性无关的目的，保证了改变属性在重建时的有效性。Ley是对原图x和重建图x’逐像素做差平方，减小Ley，可以保证重建的质量。两部分共同保证达到人脸属性编辑的效果。
+	实验部分
+	结果如下图所示。
+ 
+
+Fader Networks : Manipulating Images by Sliding Attributes
+	论文信息：Facebook AI Lab；arXiv:1706.00409v1 [cs.CV] 1 Jun 2017
+ 
+	本文的研究内容也是人脸属性编辑，提出了FaderNet，网络结构如上图所示。FaderNet核心是提取出与属性无关的特征E(x)，一旦得到这样的特征，利用该特征E(x)和属性y即可训练得到重建图，从原图到重建图的过程是一个Encoder-Decoder的结构，这里就不多做描述了。
+	为了得到与属性无关的特征E(x)，文中设计了一个Discriminator，输入是特征E(x)，输出是各属性的预测值，用属性预测值和真实值做loss，函数如下图所示：
+ 
+ 
+	通过最小化Ldis，即可有效训练判别器。同时对属性的真实值做取反操作，用预测值与取反的真实值做loss，该loss用于训练前面的Encoder，引导Encoder生成的E(x)被Discriminator判断出相反属性，而Discriminator要求判断出E(x)中带有的真实属性，形成对抗的效果，最终达到Discriminator判断不出E(x)带有什么属性的平衡状态，间接达到了得到与属性无关的特征E(x)的目标。
+实验部分
+	改变图像的单一属性，效果如下图所示。
+ 
+	同时改变多个属性的效果如图所示。
+ 
+	鲜花数据集属性编辑的效果如下图所示。
+ 
+1.4 GAN与真实感增强
+Learning from Simulated and Unsupervised Images 
+through Adversarial Training
+	论文信息：Apple, CVPR 2017 best paper
+ 
+	本文的任务是使用无标签的真实数据，来提升合成图像的真实感，同时保留合成图像的标注信息，如上图所示。
+ 
+	本文提出的模型是SimGAN，由Refiner和Discriminator组成。Refiner的输入是从合成器生成的图像 ，输出是真实感增强的合成图像 ，网络结构是卷积和残差结构，Refiner完成从图到图的映射。Refiner的loss设计如下
+ 
+	可以看出loss由两部分组成，第一部分是判别器loss，这和传统的GAN的loss相同；第二部分loss的作用是保证Refined的图像仍然保留合成器的标签，具体做法是提取 和 的特征并做差。
+	Discriminator和传统GAN的判别器相似，需要注意的是判别器不再判别图像级别的真假，而是判别像素块的真假（将一副图像分为w*h块），粒度更小，效果图如下图所示。
+ 
+	本文的另一个创新点在于使用历史的Refined图像来更新判别器，基本出发点是对抗训练不应该仅仅关注当前数据，这样会造成对抗训练的分歧，refiner引入人工性。训练阶段任何时刻生成的refined图像都应该作为假样本来供判别器判断。
+ 
+	实验部分
+	文章主要在人眼和手势的数据集上做了测试，主要效果图如下图所示。
+  
+ 
+
+2 FaderNet实验
+	实习阶段，本人主要负责复现《Fader Networks : Manipulating Images by Sliding Attributes》的结果。
+2.1 实验结果
+	当前效果最好的模型是人脸性别编辑的模型，样例的效果如下图所示：
+    
+  
+	模型的基本信息如下所示（与原文相同的超参在这里没有列出）：
+	1、未使用预训练模型，整个模型训练了226万次；
+	2、	Encoder-decoder结构loss中lambda的最大值设为30，前30万次迭代lambda线性增大，之后保持不变；
+	3、判别器单一属性的loss为属性预测值和真实值的交叉熵；
+	4、判别器和Encoder-decoder优化器都为Adam，学习率是0.0002，训练频率是1:1。
+2.2 实验经验
+	2个月的实验阶段，经验和教训总结如下。
+	1、多分类任务（例如：人脸属性的分类，属性间不是互斥的）的几种loss函数：
+	真实标签为 ，预测标签为 
+	交叉熵： 
+	做差法： 
+	指数法： 
+2、预训练（分步训练）VS 联合训练
+	从生成图的效果来看，联合训练更优，原因可能为分步训练会引起参数分布的偏移。
+3、数据集相关
+	CelebA的属性类别和各属性对应的样本数量存储在data_distribution.txt中，具体详见Excel。
+4、改变网络结构
+	（1）减少Encoder-decoder中Decoder的网络层数，保证输入输出的尺寸，由原来的7层改为4层，没有明显效果；
+	（2）加深网络，Discriminator的输入由特征向量变为重建图，网络深度增加了近一倍，没有明显效果；
+ 
+5、Auto Encoder的几种结构
+	这组实验主要探究不同卷积核尺寸的组合对重建效果的影响，不变量是网络结构，都是7层卷积和7层转置卷积。表中第一列的数字表示Encoder中每层卷积核的大小，第一行表示迭代次数，1M代表100万次，表中的实验数据表示重建图和原图像素的平均误差。
+卷积尺寸	0.4M	0.8M	1.2M	1.6M
+13_11_3_3_3_3_3	4.5e-3	4e-3	3.8e-3	3.8e-3
+13_11_7_3_3_3_3	5e-3	4.5e-3	3.5e-3	3.5e-3
+3_3_3_3_3_3_3	4.5e-3	4e-3	4e-3	4e-3
+4_4_4_4_4_4_4	5.5e-3	4.5e-3	4e-3	4e-3
+	由表可得，各种结构的整体差距不大，Encoder初始几层选用大的卷积核效果相对更好。
+6、改变属性值的大小
+	原文中图像属性标签的映射规则是：0→[0,1]和1→[1,0]，实习阶段做过的对比实验，具体如下：
+0→[0,1]  1→[1,0]	效果没有区别
+0→[0,7]  1→[7,0]	
+0→[0,x]  1→[x,0]
+自适应，x为每层输出的均值	
+7、多属性 VS 单一属性
+	多个属性同时训练：无法对各属性有效区分，导致更改属性后得到的重建图没有变化。
+	单一属性单独训练：实习阶段主要探究了三个属性——性别（男/女），眼镜（有/无），嘴巴（张开/闭合）。
+	除了性别编辑效果显著之外，眼镜和嘴巴都基本没有效果。
+8、确定lambda的范围
+	lambda用于协调loss两部分的权重，原文中lambda取0.0001，实验发现，lambda取值过小，通过实验确定lambda取10-100较为合适，属性改变可以起到明显效果。
+
