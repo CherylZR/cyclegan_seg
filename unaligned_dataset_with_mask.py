@@ -53,12 +53,12 @@ class UnalignedDatasetMask(BaseDataset):
             transforms.ToTensor()
         ])
 
-        A_img = transform(A_img)
-        A_mask = transform(A_mask)
-        B_img = transform(B_img)
-        B_mask = transform(B_mask)
-        blob_A = torch.cat((A_img, A_mask), 0)
-        blob_B = torch.cat((B_img, B_mask), 0)
+        A = transform(A_img)
+        MA = transform(MA_img)
+        B = transform(B_img)
+        MB = transform(MB_img)
+        blob_A = torch.cat((A, MA), 0)
+        blob_B = torch.cat((B, MB), 0)
 
         blob_A = self.transform_nc(blob_A, self.fineSize)
         blob_B = self.transform_nc(blob_B, self.fineSize)
@@ -75,7 +75,7 @@ class UnalignedDatasetMask(BaseDataset):
     def transform_nc(self, blob, finesize):
         [c, h, w] = blob.size()
         if random.random() < 0.5:
-            blob = hflip(blob)
+            blob = self.hflip(blob)
         i = random.randint(0, h - finesize)
         j = random.randint(0, w - finesize)
         newblob = blob[:, i:(i + finesize), j:(j + finesize)]
