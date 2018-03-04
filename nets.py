@@ -882,3 +882,27 @@ if __name__ == '__main__':
 		cyclegan.train(sample_dir, ckpt_dir, training_epochs=500000)
 	else:
 		translate(from_directory, write_to_directory, G_AB, G_BA, 3, y_dim, from_domain, cuda)
+
+		
+def add_noise(self, inputs, A_or_B):
+		if not self._opts['use_noisy_input']:
+			return inputs
+		size = inputs.size()
+		if self._opts['noise_decay_type'] == 'exponential':
+			strength = self._opts['noise_strength'] * (self._opts['noise_decay'] ** self.current_it//self._opts['noise_decay_step_size'])
+		elif self._opts['noise_decay_type'] == 'quadratic':
+			ndhw = self._opts['noise_decay_historical_weight']
+			noise_decay_balance = self._opts['noise_decay_balance']
+			if ('_hist_d_' + A_or_B) in self.__dict__:
+				d = self.__dict__['_hist_d_'+A_or_B] = self.__dict__['_hist_d_'+A_or_B] * ndhw \
+													+ self.__dict__['d_real_'+A_or_B].data.mean() * (1 - ndhw)
+				strength = self._opts['noise_strength'] * max(d - self._opts['noise_decay_balance'], 0.)**0.5
+			else:
+				self.__dict__['_hist_d_'+A_or_B] = 0
+				strength = self._opts['noise_strength']
+		else:
+			raise ValueError('Unsupported noise decay type: %s' % self._opts['noise_decay_type'])
+		noise = Variable(torch.randn(*size) * strength)
+		if self._opts['use_cuda']:
+			noise = noise.cuda()
+		return torch.clamp(inputs+noise, min=0, max=1)	
