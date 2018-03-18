@@ -11,6 +11,7 @@ class UnalignedDatasetMask(BaseDataset):
     def initialize(self, opt):
         self.opt = opt
         self.root = opt.dataroot
+        self.isTrain = opt.isTrain
         # self.dir_A = os.path.join(opt.dataroot, opt.phase + 'A')
         # self.dir_B = os.path.join(opt.dataroot, opt.phase + 'B')
         self.dir_A = os.path.join(opt.dataroot, 'coco_bike')
@@ -54,9 +55,10 @@ class UnalignedDatasetMask(BaseDataset):
         ])
 
         A = transform(A_img)
-        MA = transform(MA_img)
+        MA = torch.clamp(transform(MA_img), 0, 1)
         B = transform(B_img)
-        MB = transform(MB_img)
+        MB = torch.clamp(transform(MB_img), 0, 1)
+
         blob_A = torch.cat((A, MA), 0)
         blob_B = torch.cat((B, MB), 0)
 
@@ -74,20 +76,20 @@ class UnalignedDatasetMask(BaseDataset):
 
     def transform_nc(self, blob, finesize):
         [c, h, w] = blob.size()
-        if random.random() < 0.5:
+        if self.isTrain and random.random() < 0.5:
             blob = self.hflip(blob)
         i = random.randint(0, h - finesize)
         j = random.randint(0, w - finesize)
         newblob = blob[:, i:(i + finesize), j:(j + finesize)]
         return newblob
 
+
     def hflip(self, blob):
         [c, h, w] = blob.size()
-        for i in range(0, h):
-            for j in range(0, w // 2):
-                for channel in range(0, c):
-                    blob[channel, i, j], blob[channel, i, w - 1 - j] = blob[channel, i, w - 1 - j], blob[channel, i, j]
-        return blob
+        newblob = torch.FloatTensor(c, h, w)
+        for j in range(0, w):
+            newblob[:, :, j] = blob[:, :, w-1-j]
+        return newblob
 
     def __len__(self):
         return max(self.A_size, self.B_size)
